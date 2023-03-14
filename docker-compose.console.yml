@@ -42,7 +42,7 @@ services:
           {
             "name": "nais-1",
             "apiKey": "key1",
-            "roles": ["Team viewer", "User viewer", "Team creator"]
+            "roles": ["Team viewer", "User viewer", "Team creator", "Team member", "Admin"]
           }
         ]
 

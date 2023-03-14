@@ -11,7 +11,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		MetricsBindAddress: "127.0.0.1:8080",
-		LogLevel:           "info",
+		LogLevel:           "debug",
 		StorageApi:         "http://localhost:9001/api/v1/",
 		StorageApiKey:      "todo",
 		ConsoleApiKey:      "key1",

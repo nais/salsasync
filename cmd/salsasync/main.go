@@ -36,11 +36,14 @@ func main() {
 	defer cancel()
 
 	s := storage.New(cfg.StorageApi, cfg.StorageApiKey)
-	consoleApi := console.NewConfig("apikey")
+	consoleApi := console.NewConfig("key1")
 	teams, err := consoleApi.GetTeams(ctx)
+	users, err := consoleApi.GetUsers(ctx)
 	if err != nil {
-		log.WithError(err).Fatal("failed to get teams")
+		log.WithError(err).Fatal("failed to get users")
 	}
+	log.Debugf("Teams read %+v", teams)
+	log.Debugf("Users read %+v", users)
 
 	if err = s.SynchronizeTeamsAndUsers(teams); err != nil {
 		log.WithError(err).Fatal("failed to synchronize teams and users")
