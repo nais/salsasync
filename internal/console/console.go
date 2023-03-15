@@ -157,9 +157,8 @@ func (c *Config) GetUsers(ctx context.Context) (*Users, error) {
 	return respBody.Data.Users, nil
 }
 
-func (c *Config) setHeader(req *http.Request) http.Request {
+func (c *Config) setHeader(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+c.ApiKey)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
-	return *req
 }
