@@ -6,18 +6,39 @@ import (
 	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"reflect"
-	"strings"
-
-	//log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
+	"reflect"
 	"salsasync/internal/console"
+	"strings"
 )
 
 type Client struct {
 	url    string
 	apiKey string
+}
+
+type User struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
+
+type Users []struct {
+	User User `json:"user"`
+}
+
+type Team struct {
+	Uuid      string `json:"uuid"`
+	Name      string `json:"name"`
+	OidcUsers []struct {
+		Username string `json:"username"`
+	} `json:"oidcUsers,omitempty"`
+}
+
+type Project struct {
+	Name    string `json:"name"`
+	Uuid    string `json:"uuid"`
+	Version string `json:"version"`
 }
 
 func New(url string, apiKey string) *Client {
@@ -48,7 +69,7 @@ func (c *Client) SynchronizeTeamsAndUsers(ctx context.Context, teams *console.Te
 		if !containsStructFieldValue(*consoleUsers, "Email", dtu.Username) {
 			log.Infof("User not in console  %+v, deleting...", dtu.Username)
 			if err := c.DeleteUser(ctx, dtu.Username); err != nil {
-				log.WithError(err).Warning("failed to delete dtrackUser ", dtu.Username)
+				log.WithError(err).Warning("failed to delete user ", dtu.Username)
 			}
 		}
 	}
@@ -66,7 +87,7 @@ func (c *Client) SynchronizeTeamsAndUsers(ctx context.Context, teams *console.Te
 		if !containsStructFieldValue(*teams, "Slug", dtt.Name) && !contains(internalTeams, dtt.Name) {
 			log.Infof("Team not in console:  %s, deleting...", dtt.Name)
 			if err := c.DeleteTeam(ctx, dtt.Uuid); err != nil {
-				log.WithError(err).Warning("failed to delete dtrackTeam ", dtt.Name)
+				log.WithError(err).Warning("failed to delete team ", dtt.Name)
 			}
 		}
 	}
@@ -77,24 +98,9 @@ func (c *Client) CreateTeam(ctx context.Context, teamName string) error {
 	body, _ := json.Marshal(map[string]string{
 		"name": teamName,
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.url+"team", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", c.apiKey)
-	req.Header.Set("Accept", "application/json")
+	_, err := c.httpRequest(ctx, http.MethodPut, "team", body)
 	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-	if resp.StatusCode > 299 {
-		b, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("reading response body: %w", err)
-		}
-		return fmt.Errorf("unexpected status code: %d, with body:\n%s\n", resp.StatusCode, string(b))
+		return err
 	}
 	return nil
 }
@@ -104,68 +110,27 @@ func (c *Client) CreateUser(ctx context.Context, email string) error {
 		Email:    email,
 	}
 	body, err := json.Marshal(u)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.url+"user/oidc", bytes.NewReader(body))
-	req.Header.Set("X-API-Key", c.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	_, err = c.httpRequest(ctx, http.MethodPut, "user/oidc", body)
 	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-	if resp.StatusCode > 299 {
-		b, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("reading response body: %w", err)
-		}
-		return fmt.Errorf("unexpected status code: %d, with body:\n%s\n", resp.StatusCode, string(b))
+		return err
 	}
 	return nil
 }
 
-type User struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-}
-
-type Users []struct {
-	User User `json:"user"`
-}
-
 func (c *Client) GetUsers(ctx context.Context) ([]User, error) {
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+"user/oidc", nil)
-	req.Header.Set("X-API-Key", c.apiKey)
-	req.Header.Set("Accept", "application/json")
+	resBody, err := c.httpRequest(ctx, http.MethodGet, "user/oidc", nil)
 	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+		return nil, err
 	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("sending request: %w", err)
-	}
-	if resp.StatusCode > 299 {
-		b, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("reading response body: %w", err)
-		}
-		return nil, fmt.Errorf("unexpected status code: %d, with body:\n%s\n", resp.StatusCode, string(b))
-	}
-	resBody, err := io.ReadAll(resp.Body)
 
 	var dtrackusers []User
 	if err = json.Unmarshal(resBody, &dtrackusers); err != nil {
 		panic(err)
 	}
-	return dtrackusers, nil
+	return dtrackusers, err
 }
 
 func (c *Client) DeleteUser(ctx context.Context, username string) error {
-
 	u := &User{
 		Username: username,
 	}
@@ -174,89 +139,29 @@ func (c *Client) DeleteUser(ctx context.Context, username string) error {
 		return fmt.Errorf("marshalling body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.url+"user/oidc", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", c.apiKey)
-	req.Header.Set("Accept", "application/json")
+	_, err = c.httpRequest(ctx, http.MethodDelete, "user/oidc", body)
 	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-	if resp.StatusCode > 299 {
-		b, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("reading response body: %w", err)
-		}
-		return fmt.Errorf("unexpected status code: %d, with body:\n%s\n", resp.StatusCode, string(b))
+		return err
 	}
 	return nil
 }
 func (c *Client) MapTeamWithProject(ctx context.Context, team string, project string) error {
-
 	body, _ := json.Marshal(map[string]string{
 		"team":    team,
 		"project": project,
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.url+"acl/mapping", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", c.apiKey)
-	req.Header.Set("Accept", "application/json")
+	_, err := c.httpRequest(ctx, http.MethodPut, "acl/mapping", body)
 	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-	if resp.StatusCode > 299 {
-		b, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("reading response body: %w", err)
-		}
-		return fmt.Errorf("unexpected status code: %d, with body:\n%s\n", resp.StatusCode, string(b))
+		return err
 	}
 	return nil
 }
 
-type Team struct {
-	Uuid      string `json:"uuid"`
-	Name      string `json:"name"`
-	OidcUsers []struct {
-		Username string `json:"username"`
-	} `json:"oidcUsers,omitempty"`
-}
-
-type Project struct {
-	Name    string `json:"name"`
-	Uuid    string `json:"uuid"`
-	Version string `json:"version"`
-}
-
 func (c *Client) GetTeams(ctx context.Context) ([]Team, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+"team", nil)
-	req.Header.Set("X-API-Key", c.apiKey)
-	req.Header.Set("Accept", "application/json")
+	resBody, err := c.httpRequest(ctx, http.MethodGet, "team", nil)
 	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+		return nil, err
 	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("sending request: %w", err)
-	}
-	if resp.StatusCode > 299 {
-		b, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("reading response body: %w", err)
-		}
-		return nil, fmt.Errorf("unexpected status code: %d, with body:\n%s\n", resp.StatusCode, string(b))
-	}
-	resBody, err := io.ReadAll(resp.Body)
 
 	var dtrackTeams []Team
 	if err = json.Unmarshal(resBody, &dtrackTeams); err != nil {
@@ -265,10 +170,24 @@ func (c *Client) GetTeams(ctx context.Context) ([]Team, error) {
 	return dtrackTeams, nil
 }
 
-func (c *Client) GetProject(ctx context.Context, name string, version string) (*Project, error) {
+func (c *Client) DeleteTeam(ctx context.Context, uuid string) error {
+	body, _ := json.Marshal(map[string]string{
+		"uuid": uuid,
+	})
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+"project/lookup?name="+name+"&version="+version, nil)
+	_, err := c.httpRequest(ctx, http.MethodDelete, "team", body)
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func (c *Client) httpRequest(ctx context.Context, httpMethod string, path string, body []byte) ([]byte, error) {
+
+	req, err := http.NewRequestWithContext(ctx, httpMethod, c.url+path, bytes.NewReader(body))
 	req.Header.Set("X-API-Key", c.apiKey)
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -286,79 +205,7 @@ func (c *Client) GetProject(ctx context.Context, name string, version string) (*
 		return nil, fmt.Errorf("unexpected status code: %d, with body:\n%s\n", resp.StatusCode, string(b))
 	}
 	resBody, err := io.ReadAll(resp.Body)
-
-	var dtrackProject Project
-	if err = json.Unmarshal(resBody, &dtrackProject); err != nil {
-		panic(err)
-	}
-	return &dtrackProject, nil
-}
-
-type Tag struct {
-	Name string `json:"name"`
-}
-
-type Tags struct {
-	Tags []Tag `json:"tags"`
-}
-
-func (c *Client) UpdateProjectTags(ctx context.Context, projectUuid string, tags []string) error {
-
-	tagArray := make([]Tag, 0)
-	for _, dtt := range tags {
-		t := Tag{Name: dtt}
-		tagArray = append(tagArray, t)
-	}
-
-	body, _ := json.Marshal(Tags{tagArray})
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, c.url+"project/"+projectUuid, bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", c.apiKey)
-	req.Header.Set("Accept", "application/json")
-	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-	if resp.StatusCode > 299 {
-		b, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("reading response body: %w", err)
-		}
-		return fmt.Errorf("unexpected status code: %d, with body:\n%s\n", resp.StatusCode, string(b))
-	}
-	return nil
-}
-
-func (c *Client) DeleteTeam(ctx context.Context, uuid string) error {
-	body, _ := json.Marshal(map[string]string{
-		"uuid": uuid,
-	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.url+"team", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", c.apiKey)
-	req.Header.Set("Accept", "application/json")
-	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-	if resp.StatusCode > 299 {
-		b, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("reading response body: %w", err)
-		}
-		return fmt.Errorf("unexpected status code: %d, with body:\n%s\n", resp.StatusCode, string(b))
-	}
-	return nil
-
+	return resBody, err
 }
 
 func contains(s []string, e string) bool {
