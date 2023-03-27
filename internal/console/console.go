@@ -27,12 +27,10 @@ func NewConfig(apikey string) *Config {
 
 type User struct {
 	Email string `json:"email"`
+	Name  string `json:"name"`
 }
 
-type Users []struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-}
+type Users []User
 
 type Members []struct {
 	User User `json:"user"`
@@ -157,9 +155,8 @@ func (c *Config) GetUsers(ctx context.Context) (*Users, error) {
 	return respBody.Data.Users, nil
 }
 
-func (c *Config) setHeader(req *http.Request) http.Request {
+func (c *Config) setHeader(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+c.ApiKey)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
-	return *req
 }

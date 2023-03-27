@@ -29,23 +29,20 @@ func init() {
 }
 
 func main() {
-	parseFlags()
 	setupLogger()
+	parseFlags()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer cancel()
-
-	s := storage.New(cfg.StorageApi, cfg.StorageApiKey)
 	consoleApi := console.NewConfig("key1")
 	teams, err := consoleApi.GetTeams(ctx)
 	users, err := consoleApi.GetUsers(ctx)
 	if err != nil {
-		log.WithError(err).Fatal("failed to get users")
+		log.WithError(err).Fatal("failed to get users or teams from console")
 	}
-	log.Debugf("Teams read %+v", teams)
-	log.Debugf("Users read %+v", users)
 
-	if err = s.SynchronizeTeamsAndUsers(teams); err != nil {
+	storageApi := storage.New(cfg.StorageApi, cfg.StorageApiKey)
+	if err = storageApi.SynchronizeTeamsAndUsers(ctx, teams, users); err != nil {
 		log.WithError(err).Fatal("failed to synchronize teams and users")
 	}
 }
