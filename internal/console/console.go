@@ -27,12 +27,10 @@ func NewConfig(apikey string) *Config {
 
 type User struct {
 	Email string `json:"email"`
+	Name  string `json:"name"`
 }
 
-type Users []struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-}
+type Users []User
 
 type Members []struct {
 	User User `json:"user"`
