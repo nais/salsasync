@@ -16,11 +16,10 @@ type Config struct {
 	ApiKey               string
 }
 
-func NewConfig(apikey string) *Config {
+func NewConfig(api string, apikey string) *Config {
 	return &Config{
-		HTTPClient: http.DefaultClient,
-		//ConsoleQueryEndpoint: "http://console-backend/query",
-		ConsoleQueryEndpoint: "http://localhost:3000/query",
+		HTTPClient:           http.DefaultClient,
+		ConsoleQueryEndpoint: api,
 		ApiKey:               apikey,
 	}
 }

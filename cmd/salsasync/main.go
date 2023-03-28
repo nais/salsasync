@@ -34,7 +34,7 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer cancel()
-	consoleApi := console.NewConfig("key1")
+	consoleApi := console.NewConfig(cfg.ConsoleApi, cfg.ConsoleApiKey)
 	teams, err := consoleApi.GetTeams(ctx)
 	users, err := consoleApi.GetUsers(ctx)
 	if err != nil {
